@@ -27,7 +27,7 @@ class TaskStatus(str, Enum):
 
 class ParseContentRequest(BaseModel):
     """课件解析请求"""
-    task_id: str = Field(..., description="任务ID，用于记录进度")
+    task_id: str = Field(..., max_length=128, description="任务ID，用于记录进度")
     file_type: ContentType = Field(..., description="文件类型")
     extract_key_points: bool = Field(default=True, description="是否提炼重点")
 
@@ -51,11 +51,11 @@ class SectionScript(BaseModel):
 
 class GenerateScriptRequest(BaseModel):
     """生成讲解脚本请求"""
-    courseware_ids: list[int] = Field(..., description="课件ID列表（替代原lesson_ids）")
-    task_id: str = Field(..., description="任务ID")
+    courseware_ids: list[int] = Field(..., max_length=50, description="课件ID列表（替代原lesson_ids）")
+    task_id: str = Field(..., max_length=128, description="任务ID")
     course_id: Optional[int] = Field(default=None, description="课程ID")
-    start_prompt: Optional[str] = Field(default=None, description="自定义开场白")
-    style_prompt: Optional[str] = Field(default=None, description="讲解风格")
+    start_prompt: Optional[str] = Field(default=None, max_length=500, description="自定义开场白")
+    style_prompt: Optional[str] = Field(default=None, max_length=200, description="讲解风格")
 
 
 class GenerateScriptResponse(BaseModel):
@@ -103,8 +103,8 @@ class ParseTextContentRequest(BaseModel):
 
     POST /agent/v1/parse-content/text 接口使用
     """
-    content: str = Field(..., description="文本内容")
-    task_id: str = Field(..., description="任务ID")
+    content: str = Field(..., max_length=500000, description="文本内容（最大500KB）")
+    task_id: str = Field(..., max_length=128, description="任务ID")
     extract_key_points: bool = Field(default=True, description="是否提炼重点")
 
 

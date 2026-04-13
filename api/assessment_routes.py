@@ -37,12 +37,14 @@ async def analyze_answer(
         question_id: 题目ID
         course_id: 课程ID
         student_id: 学生ID
-        answer: 学生的回答
+        answer: 学生的回答（最大5000字符）
         courseware_id: 课件ID（可选）
 
     Returns:
         答案分析和学习情况
     """
+    # 限制答案长度
+    answer = str(answer)[:5000]
     await ensure_db()  # 确保数据库已初始化
 
     try:
@@ -140,6 +142,10 @@ async def submit_quiz(quiz_id: int, answers: list[dict]):
     """
     await ensure_db()  # 确保数据库已初始化
 
+    # 限制答案数量，防止资源耗尽
+    if len(answers) > 100:
+        raise HTTPException(status_code=400, detail="答案数量超出限制，最大支持100道题目")
+
     try:
         from utils.database import Quiz, Question
         from datetime import datetime
@@ -151,7 +157,8 @@ async def submit_quiz(quiz_id: int, answers: list[dict]):
 
         for ans in answers:
             question_id = ans.get("question_id")
-            student_answer = ans.get("answer")
+            # 限制单个答案长度
+            student_answer = str(ans.get("answer", ""))[:5000]
 
             question = await Question.get_or_none(id=question_id, quiz_id=quiz_id)
             if question:

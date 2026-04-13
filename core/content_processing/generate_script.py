@@ -120,9 +120,11 @@ async def generate_single_script(
     style = style_prompt or DEFAULT_STYLES.get("default", DEFAULT_STYLES["default"])
     start = start_prompt or "各位同学，大家好，今天我们来学习这门课程。"
 
+    from utils.courseware_reader import get_courseware_text
+
     lesson_content = courseware.parse_result.get("summary", "") if courseware.parse_result else ""
     if not lesson_content and courseware.content:
-        lesson_content = courseware.content[:2000]
+        lesson_content = await get_courseware_text(courseware, max_chars=2000)
 
     prompt = SCRIPT_GENERATION_PROMPT.format(
         style=style,
@@ -198,11 +200,13 @@ async def generate_multi_lesson_script(
     style = style_prompt or DEFAULT_STYLES.get("default", DEFAULT_STYLES["default"])
     start = start_prompt or "各位同学，大家好，今天我们来学习这门课程。"
 
+    from utils.courseware_reader import get_courseware_text
+
     lessons_content = []
     for i, courseware in enumerate(coursewares, 1):
         content = courseware.parse_result.get("summary", "") if courseware.parse_result else ""
         if not content and courseware.content:
-            content = courseware.content[:1000]
+            content = await get_courseware_text(courseware, max_chars=1000)
         lessons_content.append(f"=== 课件 {i}: {courseware.title} ===\n{content}")
 
     combined_content = "\n\n".join(lessons_content)
@@ -340,9 +344,13 @@ async def generate_script_stream(
     style = request.style_prompt or DEFAULT_STYLES["default"]
     start = request.start_prompt or "各位同学，大家好。"
 
+    from utils.courseware_reader import get_courseware_text
+
     lessons_content = []
     for i, courseware in enumerate(coursewares, 1):
-        content = courseware.parse_result.get("summary", "") if courseware.parse_result else courseware.content[:1000]
+        content = courseware.parse_result.get("summary", "") if courseware.parse_result else ""
+        if not content:
+            content = await get_courseware_text(courseware, max_chars=1000)
         lessons_content.append(f"=== 课件 {i}: {courseware.title} ===\n{content}")
 
     combined_content = "\n\n".join(lessons_content)

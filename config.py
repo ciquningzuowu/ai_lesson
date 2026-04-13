@@ -71,11 +71,11 @@ def get_db_config():
             "default": {
                 "engine": "tortoise.backends.mysql",
                 "credentials": {
-                    "host": os.getenv("MYSQL_HOST", "28.tcp.cpolar.top"),
-                    "port": int(os.getenv("MYSQL_PORT", "14960")),
-                    "user": os.getenv("MYSQL_USER", "root"),
-                    "password": "1234",# os.getenv("MYSQL_PASSWORD"),
-                    "database":"db01" #os.getenv("MYSQL_DATABASE", "ai_lesson_system"),
+                    "host": os.getenv("MYSQL_HOST", "123.57.92.145"),
+                    "port": int(os.getenv("MYSQL_PORT", "3306")),
+                    "user": os.getenv("MYSQL_USER", "le"),
+                    "password": "lylg@2026",# os.getenv("MYSQL_PASSWORD"),
+                    "database":"ai_lesson" #os.getenv("MYSQL_DATABASE", "ai_lesson_system"),
                 },
             }
         },

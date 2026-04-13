@@ -72,12 +72,15 @@ async def get_quiz_history(student_id: int, limit: int = 5):
 
     Args:
         student_id: 学生ID
-        limit: 返回数量
+        limit: 返回数量（最大100）
 
     Returns:
         答题历史
     """
     await ensure_db()  # 确保数据库已初始化
+
+    # 限制参数上限，防止资源耗尽
+    limit = min(max(1, limit), 100)
 
     try:
         from core.learning_adaptation.adjust_rhythm import get_quiz_history
@@ -100,12 +103,15 @@ async def get_qa_history(student_id: int, limit: int = 5):
 
     Args:
         student_id: 学生ID
-        limit: 返回数量
+        limit: 返回数量（最大100）
 
     Returns:
         问答历史
     """
     await ensure_db()  # 确保数据库已初始化
+
+    # 限制参数上限，防止资源耗尽
+    limit = min(max(1, limit), 100)
 
     try:
         from core.learning_adaptation.adjust_rhythm import get_qa_history

@@ -55,7 +55,7 @@ class Courseware(Model):
     """课件模型"""
     id = fields.IntField(pk=True)
     title = fields.CharField(max_length=255)
-    content = fields.TextField()
+    content = fields.BinaryField(null=True)  # 存储文件二进制（pptx/pdf）
     parse_result = fields.JSONField(null=True)
     file_type = fields.CharField(max_length=20, null=True)
     script = fields.TextField(null=True)

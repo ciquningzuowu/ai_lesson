@@ -21,7 +21,7 @@ from core.content_processing.generate_script import generate_script
 from core.content_processing.update_script import update_script
 from utils.helpers import ResponseFormatter
 from utils.node_monitor import node_state
-from utils.database import init_db, close_db, ensure_db, get_redis_cache
+from utils.database import init_db, close_db, ensure_db, get_redis_cache, Courseware
 
 router = APIRouter(prefix="/agent/v1", tags=["内容处理"])
 
@@ -39,7 +39,7 @@ async def parse_content(
     接收后端发送的课件原始内容或文本，生成解析结果。
 
     Args:
-        file: 课件文件
+        file: 课件文件（最大10MB）
         file_type: 文件类型 (ppt/pdf/text)
         task_id: 任务ID
         extract_key_points: 是否提炼重点
@@ -51,14 +51,19 @@ async def parse_content(
     await ensure_db()  # 确保数据库已初始化
 
     try:
+        # 限制文件大小（10MB）
+        max_size = 10 * 1024 * 1024
+        content = await file.read()
+        if len(content) > max_size:
+            raise HTTPException(status_code=413, detail="文件大小超出限制，最大支持10MB")
+
         node_state(
             "api.content",
             "parse_content",
             phase="enter",
             task_id=task_id,
-            extra={"file_type": str(file_type), "filename": file.filename, "course_id": course_id},
+            extra={"file_type": str(file_type), "filename": file.filename},
         )
-        content = await file.read()
         node_state("api.content", "parse_content_upload", phase="checkpoint", extra={"bytes": len(content)})
 
         if file_type == ContentType.TEXT:
@@ -90,12 +95,8 @@ async def parse_content(
                 os.write(tmp_fd, content)
                 os.close(tmp_fd)  # 关闭文件句柄
 
-                # 调试日志：验证文件存在
-                logger.info(f"[DEBUG] 临时文件创建成功: {tmp_path}, 大小: {len(content)} bytes")
-                if os.path.exists(tmp_path):
-                    logger.info(f"[DEBUG] 文件存在确认: {tmp_path}, 实际大小: {os.path.getsize(tmp_path)}")
-                else:
-                    logger.error(f"[DEBUG] 文件不存在: {tmp_path}")
+                # 调试日志（隐藏敏感路径信息）
+                logger.info(f"[DEBUG] 临时文件已创建, 大小: {len(content)} bytes")
 
                 result = await parse_file(
                     file_path=tmp_path,
@@ -115,7 +116,60 @@ async def parse_content(
 
     except Exception as e:
         node_state("api.content", "parse_content", phase="error", task_id=task_id, message=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="处理文件时发生错误")
+
+
+@router.post("/upload-courseware")
+async def upload_courseware(
+    file: UploadFile = File(...),
+    title: str = "未命名课件",
+    course_id: int = None,
+):
+    """上传课件文件（直接存储二进制到数据库）
+
+    Args:
+        file: 课件文件（ppt/pdf，最大50MB）
+        title: 课件标题
+        course_id: 课程ID
+
+    Returns:
+        课件ID和文件信息
+    """
+    await ensure_db()
+
+    content = await file.read()
+    max_size = 50 * 1024 * 1024  # 50MB
+    if len(content) > max_size:
+        raise HTTPException(status_code=413, detail="文件过大，最大支持50MB")
+
+    filename = file.filename or "课件"
+    file_ext = filename.rsplit(".", 1)[-1] if "." in filename else "pptx"
+    file_type = "ppt" if file_ext in ["ppt", "pptx"] else "pdf"
+
+    try:
+        courseware = await Courseware.create(
+            title=title,
+            content=content,  # 直接存储二进制
+            file_type=file_type,
+            course_id=course_id,
+        )
+
+        node_state(
+            "api.content",
+            "upload_courseware",
+            phase="exit",
+            extra={"courseware_id": courseware.id, "size": len(content)},
+        )
+
+        return ResponseFormatter.success_response({
+            "courseware_id": courseware.id,
+            "title": title,
+            "file_type": file_type,
+            "size_bytes": len(content),
+        })
+    except Exception as e:
+        node_state("api.content", "upload_courseware", phase="error", message=str(e))
+        raise HTTPException(status_code=500, detail="保存失败")
 
 
 @router.post("/parse-content/text")
