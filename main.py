@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import APP_CONFIG
-from utils.database import init_db, close_db, ensure_db, get_redis_cache
+from utils.database import init_db, close_db, ensure_db
 from utils.helpers import ResponseFormatter
 from utils.node_monitor import configure_application_logging, node_state
 
