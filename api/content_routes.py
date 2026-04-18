@@ -119,58 +119,6 @@ async def parse_content(
         raise HTTPException(status_code=500, detail="处理文件时发生错误")
 
 
-@router.post("/upload-courseware")
-async def upload_courseware(
-    file: UploadFile = File(...),
-    title: str = "未命名课件",
-    course_id: int = None,
-):
-    """上传课件文件（直接存储二进制到数据库）
-
-    Args:
-        file: 课件文件（ppt/pdf，最大50MB）
-        title: 课件标题
-        course_id: 课程ID
-
-    Returns:
-        课件ID和文件信息
-    """
-    await ensure_db()
-
-    content = await file.read()
-    max_size = 50 * 1024 * 1024  # 50MB
-    if len(content) > max_size:
-        raise HTTPException(status_code=413, detail="文件过大，最大支持50MB")
-
-    filename = file.filename or "课件"
-    file_ext = filename.rsplit(".", 1)[-1] if "." in filename else "pptx"
-    file_type = "ppt" if file_ext in ["ppt", "pptx"] else "pdf"
-
-    try:
-        courseware = await Courseware.create(
-            title=title,
-            content=content,  # 直接存储二进制
-            file_type=file_type,
-            course_id=course_id,
-        )
-
-        node_state(
-            "api.content",
-            "upload_courseware",
-            phase="exit",
-            extra={"courseware_id": courseware.id, "size": len(content)},
-        )
-
-        return ResponseFormatter.success_response({
-            "courseware_id": courseware.id,
-            "title": title,
-            "file_type": file_type,
-            "size_bytes": len(content),
-        })
-    except Exception as e:
-        node_state("api.content", "upload_courseware", phase="error", message=str(e))
-        raise HTTPException(status_code=500, detail="保存失败")
-
 
 @router.post("/parse-content/text")
 async def parse_text_content(request: ParseContentRequest):

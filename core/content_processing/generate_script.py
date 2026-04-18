@@ -283,11 +283,13 @@ async def generate_script(
             task_id=task_id,
         )
 
-        courseware.script = script
-        await courseware.save()
-        node_state("content.script", "script_saved", phase="checkpoint", extra={"courseware_id": courseware_id})
-
-        node_state("content.script", "generate_script_exit", phase="exit", task_id=task_id, message="单课件响应已构造")
+        node_state(
+            "content.script",
+            "generate_script_exit",
+            phase="exit",
+            task_id=task_id,
+            message="单课件响应已构造",
+        )
         return GenerateScriptResponse(
             explain=[SectionScript(section_id=0, script=script)],
             courseware_vector=vector,
@@ -299,12 +301,6 @@ async def generate_script(
         style_prompt=request.style_prompt,
         start_prompt=request.start_prompt,
     )
-
-    for i, cid in enumerate(request.courseware_ids):
-        courseware = await Courseware.get_or_none(id=cid)
-        if courseware and i < len(sections):
-            courseware.script = sections[i].script
-            await courseware.save()
 
     node_state("content.script", "generate_script_exit", phase="exit", task_id=task_id, message="多课件响应已构造")
     return GenerateScriptResponse(

@@ -2,8 +2,7 @@
 
 核心功能：
 - 异步数据库操作（使用 Tortoise ORM）
-- Redis 缓存和任务队列支持
-- 任务进度追踪
+- 任务进度追踪（已移除 Redis，改为内存追踪）
 
 数据库模型已移至 models.database_models 模块：
 - Teacher: 教师表
@@ -19,18 +18,16 @@
 """
 
 import os
-import json
 import logging
-from typing import Optional, Any
+from typing import Optional
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
 from tortoise import Tortoise
 from tortoise.transactions import in_transaction
-import redis.asyncio as redis
 
-from config import DB_CONFIG as _DB_CONFIG, REDIS_CONFIG
+from config import DB_CONFIG as _DB_CONFIG
 
 
 # 从 models 模块导入数据库模型（保持向后兼容）
@@ -67,7 +64,7 @@ async def init_db():
 
     os.makedirs(".", exist_ok=True)
     await Tortoise.init(config=_DB_CONFIG)
-    await Tortoise.generate_schemas()
+    # 不自动生成表结构，由外部迁移工具管理
     _db_initialized = True
     logger.info("数据库连接已初始化")
 
@@ -116,107 +113,28 @@ async def get_db_session():
         yield
 
 
-# ============= Redis 工具 =============
-
-class RedisCache:
-    """Redis 缓存工具"""
-
-    def __init__(self):
-        self._client: Optional[redis.Redis] = None
-
-    async def connect(self):
-        """连接 Redis"""
-        if self._client is None:
-            cfg = {**REDIS_CONFIG, "decode_responses": True}
-            self._client = redis.Redis(**cfg)
-
-    async def close(self):
-        """关闭 Redis 连接"""
-        if self._client:
-            await self._client.close()
-            self._client = None
-
-    async def get(self, key: str) -> Optional[str]:
-        """获取缓存值"""
-        if self._client is None:
-            await self.connect()
-        return await self._client.get(key)
-
-    async def set(self, key: str, value: Any, expire: int = 3600):
-        """设置缓存值"""
-        if self._client is None:
-            await self.connect()
-        if not isinstance(value, str):
-            value = json.dumps(value, ensure_ascii=False)
-        await self._client.set(key, value, ex=expire)
-
-    async def delete(self, key: str):
-        """删除缓存"""
-        if self._client is None:
-            await self.connect()
-        await self._client.delete(key)
-
-    async def get_json(self, key: str) -> Optional[Any]:
-        """获取 JSON 缓存"""
-        value = await self.get(key)
-        if value is None:
-            return None
-        if isinstance(value, bytes):
-            value = value.decode("utf-8")
-        return json.loads(value)
-
-    async def set_json(self, key: str, value: Any, expire: int = 3600):
-        """设置 JSON 缓存"""
-        await self.set(key, json.dumps(value, ensure_ascii=False), expire)
+# 内存任务进度追踪（替代 Redis）
+_task_progress: dict[str, dict] = {}
 
 
-# ============= 任务进度追踪 =============
-
-class TaskProgress:
-    """任务进度追踪器"""
-
-    def __init__(self, cache: RedisCache):
-        self.cache = cache
-        self.prefix = "task_progress:"
-
-    async def set_progress(self, task_id: str, progress: float, message: str = ""):
-        """设置任务进度"""
-        data = {
-            "task_id": task_id,
-            "progress": progress,
-            "message": message,
-        }
-        try:
-            await self.cache.set_json(f"{self.prefix}{task_id}", data, expire=86400)
-        except Exception as exc:
-            logger.warning("任务进度写入 Redis 失败（已跳过）: %s", exc)
-
-    async def get_progress(self, task_id: str) -> Optional[dict]:
-        """获取任务进度"""
-        try:
-            return await self.cache.get_json(f"{self.prefix}{task_id}")
-        except Exception as exc:
-            logger.warning("任务进度读取 Redis 失败: %s", exc)
-            return None
-
-    async def delete_progress(self, task_id: str):
-        """删除任务进度"""
-        try:
-            await self.cache.delete(f"{self.prefix}{task_id}")
-        except Exception as exc:
-            logger.warning("任务进度删除 Redis 失败: %s", exc)
+async def set_task_progress(task_id: str, progress: float, message: str = ""):
+    """设置任务进度（内存存储）"""
+    _task_progress[task_id] = {
+        "task_id": task_id,
+        "progress": progress,
+        "message": message,
+    }
 
 
-# 全局 Redis 缓存实例
-_redis_cache: Optional[RedisCache] = None
+async def get_task_progress(task_id: str) -> Optional[dict]:
+    """获取任务进度（内存存储）"""
+    return _task_progress.get(task_id)
 
 
-def get_redis_cache() -> RedisCache:
-    """获取全局 Redis 缓存实例"""
-    global _redis_cache
-    if _redis_cache is None:
-        _redis_cache = RedisCache()
-    return _redis_cache
+async def delete_task_progress(task_id: str):
+    """删除任务进度（内存存储）"""
+    if task_id in _task_progress:
+        del _task_progress[task_id]
 
 
 __all__ = [
@@ -224,6 +142,9 @@ __all__ = [
     "close_db",
     "ensure_db",
     "get_db_session",
+    "set_task_progress",
+    "get_task_progress",
+    "delete_task_progress",
     # 数据模型（从 models.database_models 导入）
     "Teacher",
     "Student",
@@ -235,8 +156,4 @@ __all__ = [
     "LearningAnalytics",
     "Quiz",
     "Question",
-    # 工具类
-    "RedisCache",
-    "TaskProgress",
-    "get_redis_cache",
 ]

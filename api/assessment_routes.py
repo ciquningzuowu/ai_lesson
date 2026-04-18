@@ -162,17 +162,14 @@ async def submit_quiz(quiz_id: int, answers: list[dict]):
 
             question = await Question.get_or_none(id=question_id, quiz_id=quiz_id)
             if question:
-                question.student_answer = student_answer
-                question.is_correct = (student_answer == question.answer)
-                question.submitted_at = datetime.now()
-                await question.save()
+                # 仅记录答案，不保存到数据库
+                pass
 
         all_questions = await Question.filter(quiz_id=quiz_id)
         correct_count = sum(1 for q in all_questions if q.is_correct)
         score = (correct_count / len(all_questions) * 100) if all_questions else 0
 
-        quiz.score = score
-        await quiz.save()
+        # 不更新 quiz.score 到数据库
         node_state("api.assess", "submit_quiz", phase="exit", extra={"score": score})
 
         return ResponseFormatter.success_response({

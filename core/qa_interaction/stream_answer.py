@@ -317,13 +317,6 @@ async def answer_question(
     node_state("qa.answer", "llm_invoke", message="生成回答")
     answer = await async_generate(prompt=prompt)
 
-    await ChatHistory.create(
-        course_id=course_id,
-        student_id=student_id,
-        question=question,
-        answer=answer,
-    )
-
     node_state("qa.answer", "exit", phase="exit", extra={"answer_chars": len(answer) if answer else 0})
     return StreamAnswerResponse(answer=answer)
 
@@ -370,12 +363,6 @@ async def stream_answer(
         full_answer += chunk
         yield chunk
 
-    await ChatHistory.create(
-        course_id=course_id,
-        student_id=student_id,
-        question=question,
-        answer=full_answer,
-    )
     node_state("qa.stream", "exit", phase="exit", extra={"answer_chars": len(full_answer)})
 
 
