@@ -75,7 +75,7 @@ def get_db_config():
                     "port": int(os.getenv("MYSQL_PORT", "3306")),
                     "user": os.getenv("MYSQL_USER", "root"),
                     "password": "lylg@2026",# os.getenv("MYSQL_PASSWORD"),
-                    "database":"ai_lesson" #os.getenv("MYSQL_DATABASE", "ai_lesson_system"),
+                    "database":"course_elf" #os.getenv("MYSQL_DATABASE", "ai_lesson_system"),
                 },
             }
         },

@@ -348,14 +348,45 @@ async def stream_answer(
     courseware_content = await get_courseware_content(course_id, courseware_id)
     conversation_history = await get_conversation_history(student_id, course_id)
 
-    prompt = ANSWER_PROMPT.format(
-        lesson_analysis=courseware_content or "无课件解析",
-        progress=student_profile["progress"],
-        avg_score=student_profile["avg_score"],
-        learning_style=student_profile["learning_style"],
-        conversation_history=conversation_history,
-        question=question,
-    )
+    # 判断是否使用 RAG
+    use_rag = await should_use_rag(question)
+    node_state("qa.stream", "rag_decision", phase="checkpoint", extra={"use_rag": use_rag})
+
+    if use_rag and courseware_content:
+        rag_service = get_rag_service()
+
+        if not rag_service.vector_store.chunks:
+            node_state("qa.stream", "rag_index", message="建立临时索引")
+            await rag_service.aindex_content(courseware_content, source=f"course_{course_id}")
+
+        retrieved_chunks = await rag_service.retrieve(question)
+        node_state("qa.stream", "rag_retrieve", extra={"chunks": len(retrieved_chunks)})
+        if retrieved_chunks:
+            retrieved_content = "\n".join(chunk.content for chunk in retrieved_chunks)
+            prompt = RAG_ANSWER_PROMPT.format(
+                retrieved_content=retrieved_content,
+                progress=student_profile["progress"],
+                avg_score=student_profile["avg_score"],
+                question=question,
+            )
+        else:
+            prompt = ANSWER_PROMPT.format(
+                lesson_analysis=courseware_content or "无课件解析",
+                progress=student_profile["progress"],
+                avg_score=student_profile["avg_score"],
+                learning_style=student_profile["learning_style"],
+                conversation_history=conversation_history,
+                question=question,
+            )
+    else:
+        prompt = ANSWER_PROMPT.format(
+            lesson_analysis=courseware_content or "无课件解析",
+            progress=student_profile["progress"],
+            avg_score=student_profile["avg_score"],
+            learning_style=student_profile["learning_style"],
+            conversation_history=conversation_history,
+            question=question,
+        )
 
     full_answer = ""
     node_state("qa.stream", "llm_stream_start", phase="checkpoint")

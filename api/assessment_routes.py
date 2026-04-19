@@ -115,11 +115,24 @@ async def get_quiz_record(quiz_id: int):
         questions = await Question.filter(quiz_id=quiz_id)
         node_state("api.assess", "quiz_record", phase="exit", extra={"questions": len(questions)})
 
+        # 将 ORM 对象转换为字典以便序列化
+        questions_data = [
+            {
+                "id": q.id,
+                "content": q.content,
+                "answer": q.answer,
+                "student_answer": q.student_answer,
+                "is_correct": q.is_correct,
+                "submitted_at": q.submitted_at.isoformat() if q.submitted_at else None,
+            }
+            for q in questions
+        ]
+
         return ResponseFormatter.success_response({
             "quiz_id": quiz_id,
             "course_id": quiz.course_id,
             "student_id": quiz.student_id,
-            "questions": questions,
+            "questions": questions_data,
             "score": quiz.score,
             "created_at": quiz.create_time.isoformat() if quiz.create_time else None,
         })
@@ -155,6 +168,10 @@ async def submit_quiz(quiz_id: int, answers: list[dict]):
         if not quiz:
             raise HTTPException(status_code=404, detail="测验不存在")
 
+        # 获取所有题目用于对比和计算分数
+        all_questions = await Question.filter(quiz_id=quiz_id)
+        correct_count = 0
+
         for ans in answers:
             question_id = ans.get("question_id")
             # 限制单个答案长度
@@ -162,14 +179,15 @@ async def submit_quiz(quiz_id: int, answers: list[dict]):
 
             question = await Question.get_or_none(id=question_id, quiz_id=quiz_id)
             if question:
-                # 仅记录答案，不保存到数据库
-                pass
+                # 实时比较答案计算正确性（不保存到数据库）
+                is_correct = (student_answer == question.answer)
+                # 累加正确数
+                correct_count += 1 if is_correct else 0
 
-        all_questions = await Question.filter(quiz_id=quiz_id)
-        correct_count = sum(1 for q in all_questions if q.is_correct)
+        # 计算总分
         score = (correct_count / len(all_questions) * 100) if all_questions else 0
 
-        # 不更新 quiz.score 到数据库
+        # 不保存到数据库，仅返回计算结果
         node_state("api.assess", "submit_quiz", phase="exit", extra={"score": score})
 
         return ResponseFormatter.success_response({

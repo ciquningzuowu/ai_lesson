@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import APP_CONFIG
-from utils.database import init_db, close_db, ensure_db
+from utils.database import init_db, close_db, ensure_db, get_redis_cache
 from utils.helpers import ResponseFormatter
 from utils.node_monitor import configure_application_logging, node_state
 
@@ -51,7 +51,7 @@ app.include_router(assessment_router)
 
 @app.on_event("startup")
 async def startup_event():
-    """应用启动事件 - 初始化数据库"""
+    """应用启动事件 - 初始化数据库和 Redis"""
     node_state("app.main", "startup", phase="enter", message="应用启动中")
 
     # 初始化数据库
@@ -62,6 +62,15 @@ async def startup_event():
     except Exception as e:
         node_state("app.main", "db_init", phase="error", message=f"数据库初始化失败: {e}")
         raise
+
+    # 初始化 Redis
+    redis_cache = get_redis_cache()
+    node_state("app.main", "redis_connect", phase="checkpoint", message="连接 Redis")
+    try:
+        await redis_cache.connect()
+        node_state("app.main", "redis_connect", phase="exit", message="Redis 已连接")
+    except Exception as e:
+        node_state("app.main", "redis_connect", phase="error", message=f"Redis 不可用: {e}")
 
     node_state(
         "app.main",
@@ -127,9 +136,20 @@ async def root():
 @app.get("/health")
 async def health_check():
     """健康检查"""
+    redis_healthy = False
+    try:
+        cache = get_redis_cache()
+        await cache.connect()
+        if cache._client:
+            await cache._client.ping()
+            redis_healthy = True
+    except Exception:
+        pass
+
     return ResponseFormatter.success_response({
         "status": "healthy",
         "database": "connected",
+        "redis": "connected" if redis_healthy else "disconnected",
     })
 
 
